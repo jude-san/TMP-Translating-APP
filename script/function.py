@@ -16,58 +16,82 @@ import json
 # client = boto3.client('kinesis', config=my_config)
 
 
+
+# # Translate a document ############# It works
+
 translate = boto3.client(service_name='translate', region_name='eu-north-1', use_ssl=True)
-# result = translate.translate_text(Text="ich bin ein Berliner", 
-#             SourceLanguageCode="de", TargetLanguageCode="en")
-# print('TranslatedText: ' + result.get('TranslatedText'))
-# print('SourceLanguageCode: ' + result.get('SourceLanguageCode'))
-# print('TargetLanguageCode: ' + result.get('TargetLanguageCode'))
+s3bucket = boto3.client('s3', region_name='eu-north-1')
 
 
-# Translate a document
-with open('input_file.json', 'r') as file:
-    data = json.load(file)
-
-info = data['Content']
-# print(info)
-
-result2 = translate.translate_document(Document={'Content': info, 'ContentType':'text/plain'}, SourceLanguageCode='en',
-    TargetLanguageCode='fr')
-
-TranslatedDocument = result2.get('TranslatedDocument')
-
-print(f"{TranslatedDocument['Content'].decode('utf-8')}")
-print('SourceLanguageCode: ' + result2.get('SourceLanguageCode'))
-print('TargetLanguageCode: ' + result2.get('TargetLanguageCode'))
+BUCKET_NAME = 'tryouta'
 
 
-# To use S3 resource
-# s3 = boto3.resource('s3')
-
-# Print out bucket names
-# for bucket in s3.buckets.all():
-#     while True:
-#         print(bucket.name)
-    # print(bucket.name)
 
 
-# Upload a new file
-# with open('test.jpg', 'rb') as data:
-#     s3.Bucket('amzn-s3-demo-bucket').put_object(Key='test.jpg', Body=data)
+
+
+### print out the list of buckets using prefix attribute or remove prefix to get all buckets in AWS account(Not recommended)
+def list_bucket(name):
+    ### getting list of buckets using in a specific region helps in debugging
+    response = s3bucket.list_buckets(
+        Prefix= name,
+    )
+
+    list_bucket = ''
+    ### Output the bucket names
+    # print('Existing buckets:')
+    for bucket in response['Buckets']:
+        # print(f'  {bucket["Name"]}')
+        if name == bucket['Name']:
+            list_bucket += bucket['Name']
+        else:
+            exit(1)
+    # print(f' in def list_bucket = {list_bucket}')
+    return list_bucket
+
+### using variable: BUCKET_NAME & Function: list_bucket to search for the bucket existence
+# name = list_bucket(BUCKET_NAME)
+# print(f'Bucket found = {name}')
+
+
+
+
+
+
+
+
+### Upload a new file
+### with open('test.jpg', 'rb') as data:
+
+# s3.Bucket('amzn-s3-demo-bucket').put_object(Key='test.jpg', Body=data)
 
 def upload_request(bucket_name, file_name):
     with open(file_name, 'rb') as data:
-        s3.Bucket(bucket_name).put_object(Key=file_name, Body=data)
+        s3bucket.Bucket(bucket_name).put_object(Key=file_name, Body=data)
 
 
 
 def upload_translated_file(bucket_name, file_name):
     with open(file_name, 'rb') as data:
-        s3.Bucket(bucket_name).put_object(Key=file_name, Body=data)
+        s3bucket.Bucket(bucket_name).put_object(Key=file_name, Body=data)
 
 def translate_request(bucket_name, file_name):
     # Translate the file
     # Get the file from the bucket
     # Translate the file
     # Upload the translated file to the bucket
-    pass
+    
+    with open('input_file.json', 'r') as file:
+        data = json.load(file)
+
+    info = data['Content']
+    # print(info)
+
+    result2 = translate.translate_document(Document={'Content': info, 'ContentType':'text/plain'}, SourceLanguageCode='en',
+        TargetLanguageCode='fr')
+
+    TranslatedDocument = result2.get('TranslatedDocument')
+
+    print(f"{TranslatedDocument['Content'].decode('utf-8')}")
+    print('SourceLanguageCode: ' + result2.get('SourceLanguageCode'))
+    print('TargetLanguageCode: ' + result2.get('TargetLanguageCode'))
