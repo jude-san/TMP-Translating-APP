@@ -1,1 +1,8 @@
 .venv
+.terraform
+terraform.tfstate.*
+.*.lock.hcl
+script/package/
+
+terraform.tfstate
+*.zip

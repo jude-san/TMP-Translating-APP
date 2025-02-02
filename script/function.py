@@ -23,10 +23,23 @@ translate = boto3.client(service_name='translate', region_name='eu-north-1', use
 s3bucket = boto3.client('s3', region_name='eu-north-1')
 
 
-BUCKET_NAME = 'tryouta'
+# BUCKET_NAME = 'tryouta'
 
 
+with open('input_file.json', 'r') as file:
+        data = json.load(file)
 
+        info = data['Content']
+        # print(info)
+
+result2 = translate.translate_document(Document={'Content': info, 'ContentType':'text/plain'}, SourceLanguageCode='en',
+    TargetLanguageCode='fr')
+
+TranslatedDocument = result2.get('TranslatedDocument')
+
+print(f"{TranslatedDocument['Content'].decode('utf-8')}")
+print('SourceLanguageCode: ' + result2.get('SourceLanguageCode'))
+print('TargetLanguageCode: ' + result2.get('TargetLanguageCode'))
 
 
 
