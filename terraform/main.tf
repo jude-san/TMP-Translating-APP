@@ -213,11 +213,7 @@ resource "aws_lambda_permission" "lambda_permission" {
 
 resource "null_resource" "example" {
   triggers = {
-    always_run = "${timestamp()}" # Always run the provisioner
-  }
-
-  provisioner "stage-exec" {
-    command = "aws lambda invoke --function-name ${aws_lambda_function.translate_Function.function_name} --payload fileb://../script/payload.json output.json"
+    always_run = "${timestamp()}"
   }
 }
 
