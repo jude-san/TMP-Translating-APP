@@ -211,6 +211,11 @@ resource "aws_lambda_permission" "lambda_permission" {
 }
 
 
+resource "null_resource" "example" {
+  triggers = {
+    always_run = "${timestamp()}"
+  }
+}
 
 
 
