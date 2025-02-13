@@ -6,3 +6,6 @@ script/package/
 
 terraform.tfstate
 *.zip
+code_journal.txt
+.envrc
+values.yaml
