@@ -19,7 +19,7 @@ projects:
     delete_source_branch_on_merge: false
     # repo_locks: true # deprecated: use repo_locks instead
     repo_locks:
-      mode: on_plan
+      mode: on_apply
     custom_policy_check: false
     # autoplan:
     #   when_modified: ["*.tf", "../modules/**/*.tf", ".terraform.lock.hcl"]
@@ -36,17 +36,14 @@ workflows:
   myworkflow:
     plan:
       steps:
-        - run: terraform init
-        - run:
-            command: 'echo "Starting terraform plan on server"'
-            output: show
-        - init
+        - run: echo "Starting terraform plan"
+        - init:
+            #extra_args: [] # Add if needed (e.g., "-upgrade")
         - plan:
-            # extra_args: ["-lock", "false"]
-        - run: terraform plan
+            #extra_args: [] # Add if needed (e.g., "-lock=false")
     apply:
       steps:
-        - run: echo "done applying terraform"
+        - run: echo "Applying changes"
         - apply
 # allowed_regexp_prefixes:
 # - dev/
