@@ -1,12 +1,12 @@
 resource "aws_lambda_function" "translate_Function" {
   function_name = "translate_Function"
-  handler       = "index.handler"
+  handler       = "function.handler"
   runtime       = "python3.11"
   role          = aws_iam_role.lambda_exec_role.arn
 
   filename = "function.zip" # Replace with your Lambda deployment package
   # source_code_hash = filebase64sha256("function.zip")
-  source_code_hash = data.archive_file.lambda.output_base64sha256
+  source_code_hash = data.archive_file.lambdafiles.output_base64sha256
 
   layers = [aws_lambda_layer_version.lambda_layer.arn]
 
@@ -28,11 +28,22 @@ resource "aws_lambda_layer_version" "lambda_layer" {
 }
 
 ### archive_file takes a local/directory and zips it up for the lambda function
-data "archive_file" "lambda" {
+data "archive_file" "lambdafiles" {
   type        = "zip"
-  source_file = "${path.module}/../script/function.py"
   output_path = "function.zip"
+
+  # source_file = "${path.module}/../script/function.py"
+  source {
+    content  = file("${path.module}/../script/function.py")
+    filename = "function.py"
+  }
+
+  source {
+    content  = file("${path.module}/../script/translation_app.py")
+    filename = "translation_app.py"
+  }
 }
+
 
 ### archive_file takes a local/directory and zips it up for the lambda function
 data "archive_file" "layers" {
@@ -72,11 +83,17 @@ resource "aws_iam_policy" "lambda_policy" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:PutObject"
+          "s3:PutObject",
+          "s3:ListBucket"
         ]
-        Resource = "arn:aws:s3:::${aws_s3_bucket.bucket1.bucket}/*"
-        Resource = "arn:aws:s3:::${aws_s3_bucket.bucket2.bucket}/*"
+        Resource = [
+          "${aws_s3_bucket.bucket1.arn}",
+          "${aws_s3_bucket.bucket1.arn}/*",
+          "${aws_s3_bucket.bucket2.arn}",
+          "${aws_s3_bucket.bucket2.arn}/*"
+        ]
       },
+
       {
         Effect = "Allow"
         Action = [
@@ -117,12 +134,27 @@ resource "aws_s3_bucket" "bucket1" {
     Environment = "Div"
   }
 }
+
+resource "aws_s3_bucket_versioning" "versioning_bucket1" {
+  bucket = aws_s3_bucket.bucket1.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket" "bucket2" {
   bucket = "translate-response-bucket" # Change to a unique bucket name
 
   tags = {
     Name        = "Translate_bucket"
     Environment = "Dev"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "versioning_bucket2" {
+  bucket = aws_s3_bucket.bucket2.id
+  versioning_configuration {
+    status = "Enabled"
   }
 }
 
@@ -180,9 +212,13 @@ resource "aws_api_gateway_deployment" "translate_deployment" {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.my_resource.id,
       aws_api_gateway_method.post_method.id,
-      aws_api_gateway_integration.lambda_integration.id,
+      aws_api_gateway_integration.lambda_integration.id
     ]))
   }
+
+  depends_on = [
+    aws_api_gateway_integration.lambda_integration
+  ]
 
   lifecycle {
     create_before_destroy = true
@@ -199,22 +235,15 @@ resource "aws_api_gateway_stage" "translate_stage" {
 
 
 # Lambda Permission for API Gateway
-resource "aws_lambda_permission" "lambda_permission" {
-  statement_id  = "AllowExecutionFromAPIGateway"
+resource "aws_lambda_permission" "api_gateway" {
+  statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.translate_Function.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.translate_api.execution_arn}/*"
+  source_arn    = "${aws_api_gateway_rest_api.translate_api.execution_arn}/*/*"
   #   source_arn = "arn:aws:execute-api:${var.myregion}:${var.accountId}:${aws_api_gateway_rest_api.api.id}/*/${aws_api_gateway_method.method.http_method}${aws_api_gateway_resource.resource.path}"
   # }
 
-}
-
-
-resource "null_resource" "example" {
-  triggers = {
-    always_run = "${timestamp()}"
-  }
 }
 
 

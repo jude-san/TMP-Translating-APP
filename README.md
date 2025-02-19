@@ -70,3 +70,9 @@ The final version of this project should be able to:
 ## Conclusion
 
 This project provides a comprehensive solution for automating language translation using cloud services. By leveraging IaC tools and cloud SDKs, the solution ensures efficient and scalable translation processes with proper storage management.
+
+###### To do's
+
+- add output tf file
+- create module for services used
+- add tutorials

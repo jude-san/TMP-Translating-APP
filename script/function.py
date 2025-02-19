@@ -1,110 +1,171 @@
 import boto3
 import json
-# from botocore.config import Config # Import Config from botocore.config && use it to configure the boto3 client
+from translation_app import translate_language, upload_request_text, upload_translated_text
+from botocore.exceptions import ClientError
+import time
+import os
+from typing import Dict, Any
 
 
-# to configure resource use the following code on a specific region and resource
-# my_config = Config(
-#     region_name = 'eu-north-1',
-#     signature_version = 'v4',
-#     retries = {
-#         'max_attempts': 10,
-#         'mode': 'standard'
-#     }
-# )
-#  Example of how to configure the client
-# client = boto3.client('kinesis', config=my_config)
+############# refactored code by amazonQ #######
 
-
-
-# # Translate a document ############# It works
-
-translate = boto3.client(service_name='translate', region_name='eu-north-1', use_ssl=True)
-s3bucket = boto3.client('s3', region_name='eu-north-1')
-
-
-# BUCKET_NAME = 'tryouta'
-
-
-with open('input_file.json', 'r') as file:
-        data = json.load(file)
-
-        info = data['Content']
-        # print(info)
-
-result2 = translate.translate_document(Document={'Content': info, 'ContentType':'text/plain'}, SourceLanguageCode='en',
-    TargetLanguageCode='fr')
-
-TranslatedDocument = result2.get('TranslatedDocument')
-
-print(f"{TranslatedDocument['Content'].decode('utf-8')}")
-print('SourceLanguageCode: ' + result2.get('SourceLanguageCode'))
-print('TargetLanguageCode: ' + result2.get('TargetLanguageCode'))
-
-
-
-### print out the list of buckets using prefix attribute or remove prefix to get all buckets in AWS account(Not recommended)
-def list_bucket(name):
-    ### getting list of buckets using in a specific region helps in debugging
-    response = s3bucket.list_buckets(
-        Prefix= name,
-    )
-
-    list_bucket = ''
-    ### Output the bucket names
-    # print('Existing buckets:')
-    for bucket in response['Buckets']:
-        # print(f'  {bucket["Name"]}')
-        if name == bucket['Name']:
-            list_bucket += bucket['Name']
-        else:
-            exit(1)
-    # print(f' in def list_bucket = {list_bucket}')
-    return list_bucket
-
-### using variable: BUCKET_NAME & Function: list_bucket to search for the bucket existence
-# name = list_bucket(BUCKET_NAME)
-# print(f'Bucket found = {name}')
-
-
-
-
-
-
-
-
-### Upload a new file
-### with open('test.jpg', 'rb') as data:
-
-# s3.Bucket('amzn-s3-demo-bucket').put_object(Key='test.jpg', Body=data)
-
-def upload_request(bucket_name, file_name):
-    with open(file_name, 'rb') as data:
-        s3bucket.Bucket(bucket_name).put_object(Key=file_name, Body=data)
-
-
-
-def upload_translated_file(bucket_name, file_name):
-    with open(file_name, 'rb') as data:
-        s3bucket.Bucket(bucket_name).put_object(Key=file_name, Body=data)
-
-def translate_request(bucket_name, file_name):
-    # Translate the file
-    # Get the file from the bucket
-    # Translate the file
-    # Upload the translated file to the bucket
+def get_environment_variables() -> Dict[str, str]:
+    """Retrieve and validate required environment variables."""
+    required_vars = ['REQUEST_BUCKET', 'RESPONSE_BUCKET']
+    env_vars = {}
     
-    with open('input_file.json', 'r') as file:
-        data = json.load(file)
+    for var in required_vars:
+        if (value := os.environ.get(var)) is None:
+            raise ValueError(f"Missing required environment variable: {var}")
+        env_vars[var] = value
+    
+    return env_vars
 
-    info = data['Content']
-    # print(info)
+def parse_request(event: Dict[str, Any]) -> Dict[str, str]:
+    """Parse and validate the incoming request."""
+    try:
+        request = json.loads(event['body'])
+        required_fields = ['src_locale', 'target_locale', 'input_text']
+        
+        for field in required_fields:
+            if field not in request:
+                raise ValueError(f"Missing required field: {field}")
+        
+        return request
+    except (json.JSONDecodeError, KeyError) as e:
+        raise ValueError(f"Invalid request format: {str(e)}")
 
-    result2 = translate.translate_document(Document={'Content': info, 'ContentType':'text/plain'}, SourceLanguageCode='en',
-        TargetLanguageCode='fr')
+def create_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a standardized API response."""
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        'body': json.dumps(body)
+    }
 
-    TranslatedDocument = result2.get('TranslatedDocument')
+def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Main Lambda handler function."""
+    print('request:', json.dumps(event))
+    
+    try:
+        # Get environment variables
+        env_vars = get_environment_variables()
+        
+        # Parse request
+        request = parse_request(event)
+        print("request:", request)
+        
+        # Extract request parameters
+        src_locale = request['src_locale']
+        target_locale = request['target_locale']
+        input_text = request['input_text']
+        
+        # Perform translation
+        start = time.perf_counter()
+        translations = translate_language(src_locale, target_locale, input_text)
+        time_diff = time.perf_counter() - start
 
-    print(f"{TranslatedDocument['Content'].decode('utf-8')}")
-    print('SourceLanguageCode: ' + result2.get('SourceLanguageCode'))
-    print('TargetLanguageCode: ' + result2.get('TargetLanguageCode'))
+        print(f"Translation result type: {type(translations)}")
+        print(f"Translation result: {translations}")
+        
+        # Upload to S3
+        # data = json.dumps(input_text)
+        # upload_request_text(env_vars['REQUEST_BUCKET'], data)
+        # upload_translated_text(env_vars['RESPONSE_BUCKET'], translations)
+        
+        
+        return create_response(200, translations)
+        
+    except ValueError as e:
+        return create_response(400, {"error": str(e)})
+    except ClientError as e:
+        return create_response(500, {"error": e.response['Error']['Code']})
+    except Exception as e:
+        return create_response(500, {"error": f"Unexpected error: {str(e)}"})
+
+
+
+
+############################## code before refactoring ##############################
+# _lambda = boto3.client('lambda')
+
+
+# def handler(event, context):
+#     print('request: {}'.format(json.dumps(event)))
+
+#     request = json.loads(event['body'])
+#     print("request", request)
+
+#     src_locale = request['src_locale']
+#     target_locale = request['target_locale']
+#     input_text = request['input_text']
+
+#     #### environment variables
+#     request_bucket = os.environ['REQUEST_BUCKET']
+#     translated_bucket = os.environ['RESPONSE_BUCKET']
+
+
+#     try:
+#         start = time.perf_counter()
+#         translations = translate_language(src_locale, target_locale, input_text)
+#         end = time.perf_counter()
+#         time_diff = (end - start)
+
+#         ##### implementing s3 uploads
+#         data = json.dumps(input_text)
+#         ### s3 request
+#         upload_request_text(request_bucket, data)
+
+#         upload_translated_text(translated_bucket, translations)
+
+
+#         translations["processing_seconds"] = time_diff
+
+#         return {
+#             'statusCode': 200,
+#             'headers': {
+#                 'Content-Type': 'application/json'
+#             },
+#             'body': json.dumps(translations)
+#         }
+
+#     except ClientError as error:
+
+#         error = {"error_text": error.response['Error']['Code']}
+#         return {
+#             'statusCode': 500,
+#             'headers': {
+#                 'Content-Type': 'application/json'
+#             },
+#             'body': json.dumps(error)
+#         }
+    
+############# s3 standalone code for later code modularity
+# def handler(event, context):
+    # try:
+    #     data = json.dumps(input_text)
+    #     upload_request_text(request_bucket, data)
+    #     upload_translated_text(translated_bucket, data)
+    #     return {
+    #         'statusCode': 200,
+    #         'headers': {
+    #             'Content-Type': 'application/json'
+    #         },
+    #         'body': json.dumps(data)
+    #     }
+    # except ClientError as error:
+    #     error = {"error_text": error.response['Error']['Code']}
+    #     return {
+    #         'statusCode': 500,
+    #         'headers': {
+    #             'Content-Type': 'application/json'
+    #         },
+    #         'body': json.dumps(error)
+    #     }
+        
+
+
+####
+
